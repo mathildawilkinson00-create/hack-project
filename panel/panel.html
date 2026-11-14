@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Gesture Presenter</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header>
+    <h1>Gesture Presenter</h1>
+    <span id="status" class="status off">⚪ Paused</span>
+  </header>
+
+  <div class="camera">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <button id="startBtn" class="big">▶ Start camera</button>
+
+  <section>
+    <h2>Gestures</h2>
+    <div id="gestureList"></div>
+  </section>
+
+  <section>
+    <h2>Sensitivity</h2>
+    <label>Hold time <span id="holdVal"></span>
+      <input id="hold" type="range" min="2" max="30">
+    </label>
+    <label>Cooldown <span id="coolVal"></span>
+      <input id="cool" type="range" min="200" max="3000" step="100">
+    </label>
+  </section>
+
+  <section>
+    <h2>Test the Figma bridge</h2>
+    <button data-test="prev">◀ Test prev</button>
+    <button data-test="next">Test next ▶</button>
+  </section>
+
+  <script type="module" src="panel.js"></script>
+</body>
+</html>
