@@ -10,18 +10,8 @@ const KEYS = {
   prev: { key: "ArrowLeft", code: "ArrowLeft", keyCode: 37 },
 };
 
-// Click on the extension icon:
-//  - on a Figma tab → show/hide the floating overlay (panel/overlay.js)
-//  - anywhere else (or if the overlay script isn't loaded yet) → open the panel window
-chrome.action.onClicked.addListener(async (tab) => {
-  if (tab?.url?.startsWith("https://www.figma.com/")) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: "toggleOverlay" });
-      return;
-    } catch (e) {
-      // Tab was opened before the extension loaded: fall back to the window.
-    }
-  }
+// Click on the extension icon → open the panel in its own window.
+chrome.action.onClicked.addListener(() => {
   chrome.windows.create({
     url: chrome.runtime.getURL("panel/panel.html"),
     type: "popup",
