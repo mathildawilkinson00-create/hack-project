@@ -2,24 +2,29 @@
 // engine/gestures.js — THE GESTURE ENGINE
 // =============================================================================
 // Job: watch the webcam and say "the user just did gesture X".
-//
-//   webcam frame ─> MediaPipe ─> gesture name ─> hold / release / cooldown ─> onGesture(name)
-//                  (the AI)     ("Victory")       rules (anti-accident)        (tell the panel)
-//
-// The panel (panel/panel.js) calls startEngine() and stopEngine(), and gives
-// us an onGesture() function to call. This file knows nothing about Figma or
+// The panel (panel/panel.js) calls startEngine() and stopEngine(), and gives us
+// an onGesture() function to call. This file knows nothing about Figma or
 // slides: it only reports gestures. The panel decides what they mean.
+//
+// How it works, in 4 steps:
+//   1. Turn on the webcam
+//   2. Load MediaPipe (the AI that finds the hand)
+//   3. Look at every webcam image:
+//        findGesture()   → which gesture is it?  (uses countFingers())
+//        checkGesture()  → held long enough? let go since last time? cooldown over?
+//   4. If yes → onGesture("Victory") tells the panel
+//
+// Thanks to Philippe for the structure (findGesture / countFingers / checkGesture).
 // =============================================================================
 
 import { GestureRecognizer, FilesetResolver, DrawingUtils } from "../lib/mediapipe/vision_bundle.mjs";
 
 // ---- Hide MediaPipe's internal log messages ---------------------------------
-// MediaPipe's C++ engine prints technical notes in the console, like
+// MediaPipe's C++ engine prints harmless technical notes in the console, like
 //   "W1114 18:20:51 gl_context.cc:1060] OpenGL error checking is disabled"
 //   "INFO: Created TensorFlow Lite XNNPACK delegate for CPU."
-// They are harmless, but Chrome lists them as "Errors" on chrome://extensions.
-// This hides ONLY those lines (they start with "INFO:" or W/I + 4 digits);
-// every other console message still shows normally.
+// Chrome lists them as "Errors" on chrome://extensions. This hides ONLY those
+// lines (they start with "INFO:" or W/I + 4 digits); everything else still shows.
 const isMediaPipeNote = (args) => typeof args[0] === "string" && /^(INFO:|[WI]\d{4} )/.test(args[0]);
 for (const level of ["log", "info", "warn", "error"]) {
   const original = console[level];
@@ -28,206 +33,241 @@ for (const level of ["log", "info", "warn", "error"]) {
   };
 }
 
-// ---- Engine state (remembered between frames) -------------------------------
-let recognizer = null; // the loaded MediaPipe model (loaded once, then reused)
+// ---- The engine's variables --------------------------------------------------
+let recognizer = null; // the MediaPipe AI (loaded only once)
 let stream = null;     // the webcam stream (kept so we can turn it off)
 let reader = null;     // hands us webcam frames one by one
-let running = false;   // true while the engine is on
+let running = false;   // true = the engine is on
 
-// After a gesture fires, how many frames you must "let go" of it before it can
-// fire again. 4 instead of 1 because MediaPipe sometimes flickers for 1–2 frames.
+// Memory between two images (used by checkGesture)
+let lastGesture = null;  // gesture seen in the previous image
+let framesHeld = 0;      // how many images in a row we've seen it
+let lastActionTime = 0;  // time of the last action (for the cooldown)
+let firedGesture = null; // gesture that just triggered an action
+let framesReleased = 0;  // how many images it has been let go
+
+// How many "different" images before a gesture counts as let go.
+// 4 instead of 1 because MediaPipe sometimes flickers for 1–2 images.
 const RELEASE_FRAMES = 4;
 
 // =============================================================================
-// startEngine: turn on the camera, load the AI, start watching.
+//  START
 // =============================================================================
 export async function startEngine({ video, canvas, settings, onGesture }) {
   if (running) return; // already on
 
-  // ---- Step 1: turn on the webcam ----
-  // Chrome shows the "allow camera?" prompt the first time.
+  // ---- Step 1: the webcam ----
+  // Chrome shows the "Allow camera?" prompt here the first time.
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480, facingMode: "user" },
-    });
-  } catch (e) {
-    // Turn Chrome's technical error names into messages people understand.
-    if (e.name === "NotAllowedError") throw new Error("Camera access denied. Allow it in Chrome site settings.");
-    if (e.name === "NotFoundError") throw new Error("No camera found.");
-    throw e;
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+  } catch (error) {
+    if (error.name === "NotAllowedError") throw new Error("Camera access denied. Allow it in Chrome site settings.");
+    if (error.name === "NotFoundError") throw new Error("No camera found.");
+    throw error;
   }
-  // Show the camera in the panel. (This <video> is only for display: the
-  // detection reads frames directly from the webcam, see step 4.)
-  video.srcObject = stream;
+  video.srcObject = stream; // show the camera in the panel's <video>
   await video.play();
 
-  // ---- Step 2: load MediaPipe (only the first time) ----
+  // ---- Step 2: MediaPipe ----
+  // The files are in lib/mediapipe/ (no CDN: Chrome extensions can't load code from the internet).
   try {
     if (!recognizer) {
-      // Load the WebAssembly engine from OUR folder (extensions can't load code from the internet).
       const fileset = await FilesetResolver.forVisionTasks(chrome.runtime.getURL("lib/mediapipe/wasm"));
-      // Load the trained AI model. VIDEO mode = we'll send a continuous stream of frames.
       recognizer = await GestureRecognizer.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: chrome.runtime.getURL("lib/mediapipe/gesture_recognizer.task") },
-        runningMode: "VIDEO",
-        numHands: 1,
+        runningMode: "VIDEO", // we'll send a continuous stream of images
+        numHands: 1,          // only one hand
       });
     }
-  } catch (e) {
+  } catch (error) {
     stopEngine(); // the AI failed to load: turn the camera back off
-    throw e;
+    throw error;
   }
 
+  // ---- Step 3: look at every image ----
   running = true;
+  lastGesture = null; // start with a clean memory
+  framesHeld = 0;
+  firedGesture = null;
+  framesReleased = 0;
+
   const ctx = canvas.getContext("2d");  // to draw on the transparent canvas over the video
-  const drawer = new DrawingUtils(ctx); // MediaPipe's helper to draw hand skeletons
+  const drawer = new DrawingUtils(ctx); // MediaPipe's tool to draw the hand
 
-  // Memory for the anti-accident rules (steps 3d–3f).
-  let lastName = null;   // gesture seen in the previous frame
-  let heldFrames = 0;    // how many frames in a row we've seen it
-  let lastFire = 0;      // time (ms) of the last accepted gesture
-  let firedName = null;  // gesture that just fired, waiting to be let go
-  let releaseFrames = 0; // how many frames it has been let go
+  // Called for each webcam image (~30 times per second).
+  function analyseImage(image) {
+    // The canvas must be the same size as the image
+    canvas.width = image.width;
+    canvas.height = image.height;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // ---- Step 3: analyse ONE webcam image (called ~30 times per second) ----
-  function analyseFrame(image) {
-    // Keep the drawing canvas the same size as the webcam image.
-    if (canvas.width !== image.width) {
-      canvas.width = image.width;
-      canvas.height = image.height;
-    }
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // erase the previous skeleton
-
-    // 3a. Ask MediaPipe what it sees. The result contains:
-    //   result.landmarks → 21 points per hand, each { x, y } between 0 and 1
-    //   result.gestures  → its guess, e.g. [[{ categoryName: "Thumb_Up", score: 0.92 }]]
+    // Ask MediaPipe to look at the image
     const result = recognizer.recognizeForVideo(image, performance.now());
-    const hand = result.landmarks[0]; // first hand's 21 points (undefined if no hand)
+    const hand = result.landmarks[0]; // the hand's 21 points (or undefined if no hand)
 
-    // 3b. Draw the hand skeleton, if "Show hand tracking" is ticked.
+    // "Show hand tracking" option: draw the hand
     if (settings.showTracking && hand) {
       drawer.drawConnectors(hand, GestureRecognizer.HAND_CONNECTIONS, { color: "#00e5ff", lineWidth: 3 });
       drawer.drawLandmarks(hand, { color: "#ff4081", radius: 3 });
     }
 
-    // 3c. Decide which gesture it is.
-    let name = result.gestures[0]?.[0]?.categoryName ?? null;
-    // MediaPipe only recognizes 1 or 2 fingers when they point UP, and doesn't
-    // know 3 fingers at all. So for those we ignore its answer and count the
-    // fingers ourselves (see fingerGesture below).
-    if (name === "Pointing_Up" || name === "Victory") name = null;
-    const fingers = hand ? fingerGesture(hand, canvas.width, canvas.height) : null;
-    if (fingers) name = fingers;
-    if (name === "None") name = null; // MediaPipe's way of saying "a hand, but no known gesture"
+    // Which gesture is it? (e.g. "Thumb_Up", "Victory", or null)
+    const gesture = findGesture(result, hand, canvas.width, canvas.height);
 
-    // 3d. HOLD rule: count how many frames in a row we've seen the same gesture.
-    if (name && name === lastName) heldFrames++;
-    else {
-      lastName = name;
-      heldFrames = 1;
-    }
-
-    // 3e. RELEASE rule: after a gesture fires, you must let go of it (other
-    // gesture, closed hand or no hand) before it can fire again.
-    // → holding ✌️ for 5 seconds moves only ONE slide.
-    if (firedName) {
-      if (name !== firedName) releaseFrames++;
-      else releaseFrames = 0;
-      if (releaseFrames >= RELEASE_FRAMES) {
-        firedName = null;
-        releaseFrames = 0;
-        heldFrames = name ? 1 : 0;
-      }
-      return; // nothing can fire until the gesture is let go
-    }
-
-    // 3f. FIRE if held long enough (hold time) AND the cooldown since the last action is over.
-    const now = performance.now();
-    if (name && heldFrames >= settings.holdFrames && now - lastFire >= settings.cooldownMs) {
-      lastFire = now;
-      heldFrames = 0;
-      firedName = name;
-      releaseFrames = 0;
-      onGesture(name); // tell the panel → it decides what to do (next/prev slide)
-    }
+    // ---- Step 4: decide whether to trigger an action ----
+    checkGesture(gesture, settings, onGesture);
   }
 
-  // ---- Step 4: the frame loop ----
-  // We read frames straight from the webcam (MediaStreamTrackProcessor) instead
-  // of from the <video>. Why: Chrome pauses videos and animations in windows
-  // that are minimized or hidden behind Figma, which would freeze detection.
+  // The loop: read images straight from the webcam.
+  // Why not requestAnimationFrame (simpler)? Chrome PAUSES it when the window
+  // is minimized or hidden behind Figma fullscreen, and gestures would stop
+  // during the presentation. Reading the webcam directly keeps working.
   const track = stream.getVideoTracks()[0];
   reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
   const myReader = reader; // if the engine is restarted, this old loop sees it and stops
 
-  async function frameLoop() {
+  async function loop() {
     while (running && reader === myReader) {
       let frame;
       try {
-        const { done, value } = await myReader.read(); // wait for the next webcam frame
+        const { done, value } = await myReader.read(); // wait for the next webcam image
         if (done) break; // the camera was turned off
         frame = value;
         const image = await createImageBitmap(frame); // convert it into an image MediaPipe accepts
         try {
-          analyseFrame(image);
+          analyseImage(image);
         } finally {
           image.close(); // free memory right away (30 images per second adds up fast)
         }
-      } catch (e) {
-        if (running) console.error("[engine] frame error", e);
+      } catch (error) {
+        if (running) console.error("[engine] image error", error);
       } finally {
         frame?.close(); // free the raw frame's memory too
       }
     }
   }
-  frameLoop(); // no "await": the loop runs in the background, startEngine returns right away
+  loop(); // no "await": the loop runs in the background, startEngine returns right away
 }
 
 // =============================================================================
-// fingerGesture: our own finger counting, works whatever way the hand points.
+//  FIND THE GESTURE
 // =============================================================================
-// MediaPipe gives 21 points per hand, numbered like this:
+// Returns the gesture's name ("Thumb_Up", "Victory", "Three_Fingers"...) or null.
+function findGesture(result, hand, width, height) {
+  // The name MediaPipe gives (Thumb_Up, Thumb_Down, Open_Palm, Closed_Fist...)
+  let name = null;
+  if (result.gestures.length > 0) {
+    name = result.gestures[0][0].categoryName;
+  }
+
+  // "None" = MediaPipe sees a hand but no known gesture.
+  // "Pointing_Up" and "Victory" = MediaPipe only recognizes them with fingers
+  // pointing UP. We ignore those three and count the fingers ourselves.
+  if (name === "None" || name === "Pointing_Up" || name === "Victory") name = null;
+
+  if (hand) {
+    const fingers = countFingers(hand, width, height);
+    if (fingers === 1) name = "Pointing_Up";   // 1 finger
+    if (fingers === 2) name = "Victory";       // 2 fingers
+    if (fingers === 3) name = "Three_Fingers"; // 3 fingers
+  }
+  return name;
+}
+
+// =============================================================================
+//  COUNT THE FINGERS (works in every direction)
+// =============================================================================
+// Idea: a finger is UP if its tip is FARTHER from the wrist than its middle
+// joint. When the finger is bent, the tip comes back toward the palm, so it's
+// closer to the wrist. Works with the hand pointing up, down or sideways.
 //
+// MediaPipe's points used (numbered 0 to 20):
 //   0 = wrist
-//   thumb:          1  2  3  4 (tip)
-//   index finger:   5  6  7  8 (tip)      6 = middle joint
-//   middle finger:  9 10 11 12 (tip)     10 = middle joint
-//   ring finger:   13 14 15 16 (tip)     14 = middle joint
-//   pinky:         17 18 19 20 (tip)     18 = middle joint
-//
-// A finger is "extended" (straight) when its tip is clearly farther from the
-// wrist than its middle joint. Distances don't care about direction, so it
-// works with the hand pointing up, sideways or down.
-//
-// Returns "Pointing_Up" (☝️ index only), "Victory" (✌️ index + middle),
-// "Three_Fingers" (index + middle + ring), or null. The pinky must stay folded.
-// (We reuse MediaPipe's names "Pointing_Up" / "Victory" so the panel labels match.)
-function fingerGesture(points, width, height) {
-  // Distance between two points in pixels (points are 0–1, so multiply by the image size).
-  const distance = (a, b) => Math.hypot((a.x - b.x) * width, (a.y - b.y) * height);
-  const wrist = points[0];
-  // × 1.15 = the tip must be at least 15% farther than the joint, so half-bent fingers don't count.
-  const isExtended = (tip, joint) => distance(points[tip], wrist) > distance(points[joint], wrist) * 1.15;
+//   index  : tip 8,  joint 6
+//   middle : tip 12, joint 10
+//   ring   : tip 16, joint 14
+//   pinky  : tip 20, joint 18
+function countFingers(hand, width, height) {
+  // Distance between two points, in pixels (points are 0–1, so multiply by the image size)
+  function distance(a, b) {
+    const dx = (a.x - b.x) * width;
+    const dy = (a.y - b.y) * height;
+    return Math.hypot(dx, dy);
+  }
 
-  const index = isExtended(8, 6);
-  const middle = isExtended(12, 10);
-  const ring = isExtended(16, 14);
-  const pinky = isExtended(20, 18);
+  const wrist = hand[0];
 
-  if (pinky || !index) return null; // every gesture needs the index up and the pinky down
-  if (middle && ring) return "Three_Fingers";
-  if (middle) return "Victory";
-  if (!ring) return "Pointing_Up";
-  return null; // odd combo (index + ring only): ignore
+  // Returns true if the finger is up
+  function isUp(tipNumber, jointNumber) {
+    const tipDistance = distance(hand[tipNumber], wrist);
+    const jointDistance = distance(hand[jointNumber], wrist);
+    return tipDistance > jointDistance * 1.15; // 1.15 = tip must be 15% farther (half-bent fingers don't count)
+  }
+
+  const index = isUp(8, 6);
+  const middle = isUp(12, 10);
+  const ring = isUp(16, 14);
+  const pinky = isUp(20, 18);
+
+  // Rules: the index must be up and the pinky folded
+  if (pinky || !index) return 0;
+  if (middle && ring) return 3; // index + middle + ring
+  if (middle) return 2;         // index + middle
+  if (!ring) return 1;          // index only
+  return 0;                     // odd combo (index + ring): ignore
 }
 
 // =============================================================================
-// stopEngine: stop watching and turn off the camera.
+//  CHECK WHETHER TO TRIGGER AN ACTION (the anti-accident rules)
+// =============================================================================
+function checkGesture(gesture, settings, onGesture) {
+  // 1. HOLD: count how many images in a row we've seen the same gesture
+  if (gesture !== null && gesture === lastGesture) {
+    framesHeld = framesHeld + 1;
+  } else {
+    lastGesture = gesture;
+    framesHeld = 1;
+  }
+
+  // 2. RELEASE: a gesture just fired → it must be LET GO before it can fire again
+  //    (close the hand, change gesture or take the hand away).
+  //    → holding ✌️ for 5 seconds moves only ONE slide.
+  if (firedGesture !== null) {
+    if (gesture !== firedGesture) {
+      framesReleased = framesReleased + 1;
+    } else {
+      framesReleased = 0;
+    }
+    if (framesReleased >= RELEASE_FRAMES) {
+      firedGesture = null; // let go: ready for a new gesture
+      framesReleased = 0;
+    }
+    return; // no action until it's let go
+  }
+
+  // 3. COOLDOWN + the conditions to trigger
+  const hasGesture = gesture !== null;
+  const heldLongEnough = framesHeld >= settings.holdFrames;
+  const cooldownOver = performance.now() - lastActionTime >= settings.cooldownMs;
+
+  if (hasGesture && heldLongEnough && cooldownOver) {
+    lastActionTime = performance.now();
+    firedGesture = gesture;
+    framesReleased = 0;
+    framesHeld = 0;
+    onGesture(gesture); // tell the panel: "this gesture was just made"
+  }
+}
+
+// =============================================================================
+//  STOP
 // =============================================================================
 export function stopEngine() {
-  running = false;
-  reader?.cancel().catch(() => {}); // stop reading frames
+  running = false;                  // the loop stops
+  reader?.cancel().catch(() => {}); // stop reading images
   reader = null;
-  stream?.getTracks().forEach((t) => t.stop()); // turn off the webcam (its light goes off)
-  stream = null;
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop()); // turns off the webcam (its light goes off)
+    stream = null;
+  }
 }
