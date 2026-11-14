@@ -6,10 +6,13 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   holdFrames: 8,
   cooldownMs: 1000,
+  showTracking: false,
   gestures: {
     Thumb_Up: { on: true, action: "next" },
     Thumb_Down: { on: true, action: "prev" },
     Open_Palm: { on: false, action: "none" },
+    Pointing_Up: { on: false, action: "next" },
+    Victory: { on: false, action: "prev" },
   },
 };
 // Every gesture MediaPipe can recognize (see CLAUDE.md).
@@ -18,8 +21,8 @@ const LABELS = {
   Thumb_Down: "👎 Thumb down",
   Open_Palm: "✋ Open palm",
   Closed_Fist: "✊ Closed fist",
-  Pointing_Up: "☝️ Pointing up",
-  Victory: "✌️ Victory",
+  Pointing_Up: "☝️ One finger",
+  Victory: "✌️ Two fingers",
   ILoveYou: "🤟 I love you",
 };
 const ACTIONS = { next: "Next slide", prev: "Previous slide", none: "Nothing" };
@@ -82,11 +85,13 @@ $("addBtn").onclick = () => {
 };
 
 function renderSliders() {
+  $("tracking").checked = !!settings.showTracking;
   $("hold").value = settings.holdFrames;
   $("cool").value = settings.cooldownMs;
   $("holdVal").textContent = `${settings.holdFrames} frames`;
   $("coolVal").textContent = `${(settings.cooldownMs / 1000).toFixed(1)} s`;
 }
+$("tracking").onchange = (e) => { settings.showTracking = e.target.checked; saveSettings(); };
 $("hold").oninput = (e) => { settings.holdFrames = +e.target.value; renderSliders(); saveSettings(); };
 $("cool").oninput = (e) => { settings.cooldownMs = +e.target.value; renderSliders(); saveSettings(); };
 
