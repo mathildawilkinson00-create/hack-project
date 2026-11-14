@@ -41,7 +41,7 @@ More (👍 👎 ✋ ✊ ☝️) can be added in the panel with **+ Add gesture**
 |---|---|
 | `manifest.json` | The extension's ID card for Chrome (explained below) |
 | `engine/gestures.js` | Webcam + MediaPipe + anti-accident rules (hold, release, cooldown) |
-| `panel/panel.html` `.css` `.js` | The control panel window: settings, start/stop, "keep on top" |
+| `panel/panel.html` `.css` `.js` | The control panel window: `.html` = what's on it, `.css` = how it looks, `.js` = what happens |
 | `bridge/background.js` | Opens the panel; forwards actions to the Figma tab |
 | `bridge/content.js` | Runs inside Figma; presses the arrow keys |
 | `lib/mediapipe/` | Google's MediaPipe library + AI model, used as-is (see its README) |
