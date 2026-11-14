@@ -1,13 +1,17 @@
-/* Owner: UI person. Make it pretty! */
+/* =============================================================================
+   panel/panel.css — the control panel's look
+   ========================================================================== */
+
+/* !! Colours: defined once here, used everywhere with var(--name) !! */
 :root {
-  --bg: #111318;
-  --card: #1c1f27;
+  --bg: #111318;     /* page background */
+  --card: #1c1f27;   /* gesture rows, buttons */
   --text: #f2f3f5;
-  --muted: #9aa0ab;
-  --accent: #7c5cff;
-  --on: #2ecc71;
+  --muted: #9aa0ab;  /* secondary text */
+  --accent: #7c5cff; /* purple: main button, toast */
+  --on: #2ecc71;     /* green: "Listening" */
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; } /* width includes padding */
 body {
   margin: 0;
   padding: 16px;
@@ -15,14 +19,21 @@ body {
   background: var(--bg);
   color: var(--text);
 }
+
+/* !! Header and section titles !! */
 header { display: flex; justify-content: space-between; align-items: center; }
 h1 { font-size: 18px; margin: 0; }
 h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; }
 .status { font-size: 13px; }
 .status.on { color: var(--on); }
 
+/* !! Camera: the canvas is stacked exactly on top of the video !! */
 .camera { position: relative; margin-top: 12px; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
-.camera video, .camera canvas { position: absolute; inset: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+.camera video, .camera canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  transform: scaleX(-1); /* mirror */
+}
+/* "Next slide!" (invisible until panel.js adds the "show" class) */
 .toast {
   position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
   background: var(--accent); padding: 6px 14px; border-radius: 999px;
@@ -30,53 +41,20 @@ h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); margin: 16
 }
 .toast.show { opacity: 1; }
 
+/* !! Buttons and inputs !! */
 button { background: var(--card); color: var(--text); border: 1px solid #333; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
 button.big { width: 100%; margin-top: 12px; padding: 12px; background: var(--accent); border: none; font-weight: 600; }
-
-.gesture { display: flex; align-items: center; gap: 8px; background: var(--card); padding: 8px; border-radius: 8px; margin-bottom: 6px; }
-.gesture .name { flex: 1; }
 label { display: block; margin-bottom: 8px; font-size: 14px; }
 input[type=range] { width: 100%; }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.5; } /* help text under the sliders */
 
-/* Info "i" with hover tooltip */
-h2 { display: flex; align-items: center; gap: 6px; }
-.info {
-  position: relative; display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border-radius: 50%;
-  border: 1px solid var(--muted); color: var(--muted);
-  font: italic 600 11px/1 Georgia, serif; text-transform: none; cursor: help;
-}
-.info:hover, .info:focus { color: var(--text); border-color: var(--text); outline: none; }
-.info .tip {
-  position: absolute; left: -80px; bottom: calc(100% + 8px);
-  width: 240px; padding: 10px 12px; border-radius: 8px;
-  background: var(--card); border: 1px solid #333; color: var(--text);
-  font: 400 12px/1.4 system-ui, sans-serif; text-transform: none;
-  box-shadow: 0 6px 20px rgba(0,0,0,.5);
-  opacity: 0; visibility: hidden; transition: opacity .15s; z-index: 10;
-}
-.info:hover .tip, .info:focus .tip { opacity: 1; visibility: visible; }
-
-/* "Keep on top" button + settings toggle (toggle only shown in the floating window) */
-.pip-btn { width: 100%; margin-top: 8px; }
-#settingsBtn { display: none; }
-button.link { background: none; border: none; color: var(--muted); padding: 8px 0 0; width: 100%; font-size: 12px; }
-button.link:hover { color: var(--text); }
-.pip-note { color: var(--muted); font-size: 13px; line-height: 1.5; }
-
-/* Floating always-on-top window: compact layout */
-:root.pip body { padding: 10px; font-size: 13px; }
-:root.pip header { display: none; }
-:root.pip .camera { margin-top: 0; }
-:root.pip button.big { padding: 8px; margin-top: 8px; }
-:root.pip .pip-btn { padding: 6px; font-size: 12px; }
-:root.pip #settingsBtn { display: block; }
-:root.pip .info .tip { width: 200px; left: -60px; top: calc(100% + 8px); bottom: auto; }
-
-/* Add / remove gestures */
+/* !! Gesture list rows: [checkbox] [name] [action] [✕] !! */
+.gesture { display: flex; align-items: center; gap: 8px; background: var(--card); padding: 8px; border-radius: 8px; margin-bottom: 6px; }
+.gesture .name { flex: 1; } /* the name takes all the free space */
 .gesture .remove { padding: 2px 8px; background: none; border: none; color: var(--muted); }
 .gesture .remove:hover { color: #ff6b6b; }
 .add-gesture { display: flex; gap: 6px; margin-top: 4px; }
+.add-gesture[hidden] { display: none; } /* "display: flex" above would otherwise beat the hidden attribute */
 .add-gesture select { flex: 1; min-width: 0; }
 .add-gesture button { white-space: nowrap; }
 .empty { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }

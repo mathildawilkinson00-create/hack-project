@@ -1,16 +1,25 @@
 <!doctype html>
+<!--
+  panel/panel.html — WHAT is on the control panel (buttons, video, sliders...).
+  panel.css = how it LOOKS, panel.js = what HAPPENS when you click.
+  Elements with an id="..." are used by panel.js through $("id").
+  This window is opened by bridge/background.js when you click the extension icon.
+-->
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Gesture Presenter</title>
-  <link rel="stylesheet" href="panel.css">
+  <title>Point Right</title>
+  <link rel="stylesheet" href="panel.css"> <!-- load the look -->
 </head>
 <body>
+  <!-- Title + "🟢 Listening / ⚪ Paused" status -->
   <header>
-    <h1>Gesture Presenter</h1>
+    <h1>Point Right</h1>
     <span id="status" class="status off">⚪ Paused</span>
   </header>
 
+  <!-- Camera: the video, a transparent canvas on top for the hand skeleton,
+       and the "toast" bubble that shows "➡️ Next slide!" -->
   <div class="camera">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
@@ -18,11 +27,8 @@
   </div>
 
   <button id="startBtn" class="big">▶ Start camera</button>
-  <button id="pipBtn" class="pip-btn" title="Float the panel above every window, even Figma fullscreen">📌 Keep on top</button>
 
-  <button id="settingsBtn" class="link">⚙ Settings ▾</button>
-
-  <div id="settings">
+  <!-- Gesture list: the rows are created by showGestureList() in panel.js -->
   <section>
     <h2>Gestures</h2>
     <div id="gestureList"></div>
@@ -37,30 +43,31 @@
     <label><input id="tracking" type="checkbox"> Show hand tracking</label>
   </section>
 
+  <!-- Sliders for the engine's anti-accident rules -->
   <section>
-    <h2>Sensitivity
-      <span class="info" tabindex="0" aria-label="About sensitivity">i
-        <span class="tip" role="tooltip">
-          <b>Hold time:</b> how long you must hold a gesture before it triggers. Higher = fewer accidental slide changes, but slower to react.<br><br>
-          <b>Cooldown:</b> the pause after each action before a new gesture is accepted. Higher = no double-skips, but you wait longer between slides.
-        </span>
-      </span>
-    </h2>
+    <h2>Sensitivity</h2>
     <label>Hold time <span id="holdVal"></span>
       <input id="hold" type="range" min="2" max="30">
     </label>
     <label>Cooldown <span id="coolVal"></span>
       <input id="cool" type="range" min="200" max="3000" step="100">
     </label>
+    <p class="hint">
+      <b>Hold time:</b> how long you hold a gesture before it triggers. Higher = fewer accidents, but slower.<br>
+      <b>Cooldown:</b> the pause after each action. Higher = no double-skips, but you wait longer between slides.
+    </p>
   </section>
 
-  <section>
+  <!-- Buttons to test the Figma connection without the camera.
+       Hidden from users; kept for debugging. Remove "hidden" to show it again. -->
+  <section id="bridgeTest" hidden>
     <h2>Test the Figma bridge</h2>
-    <button data-test="prev">◀ Test prev</button>
-    <button data-test="next">Test next ▶</button>
+    <button id="testPrev">◀ Test prev</button>
+    <button id="testNext">Test next ▶</button>
   </section>
-  </div>
 
+  <!-- Load the behaviour last, once all the elements above exist.
+       type="module" lets panel.js use "import" to load the engine. -->
   <script type="module" src="panel.js"></script>
 </body>
 </html>

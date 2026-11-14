@@ -1,22 +1,31 @@
-// Control panel: settings UI + glue between the engine and the bridge.
-// Owner: UI person (integration person helps connect it).
+// =============================================================================
+// panel/panel.js — THE CONTROL PANEL'S BRAIN
+// =============================================================================
+// This file has 3 jobs:
+//   1. SETTINGS  show the gesture list + sliders, save them in Chrome
+//   2. ENGINE    start / stop the camera engine (engine/gestures.js)
+//   3. ACTIONS   when the engine reports "gesture X", look up what X is
+//                mapped to (next / prev slide) and send it to the bridge
+// =============================================================================
+
 import { startEngine, stopEngine } from "../engine/gestures.js";
 
+// ---- Default settings (used the first time you open the panel) --------------
 const DEFAULT_SETTINGS = {
-  enabled: true,
-  holdFrames: 8,
-  cooldownMs: 1000,
-  showTracking: false,
+  version: 5,          // change this number to reset everyone's saved settings to these defaults
+  holdFrames: 8,       // frames a gesture must be held before it fires (~30 frames = 1 second)
+  cooldownMs: 1000,    // minimum pause between two actions, in milliseconds
+  showTracking: false, // draw the hand skeleton over the camera?
   gestures: {
-    Thumb_Up: { on: true, action: "next" },
-    Thumb_Down: { on: true, action: "prev" },
-    Open_Palm: { on: false, action: "none" },
-    Pointing_Up: { on: false, action: "next" },
-    Victory: { on: false, action: "next" },
-    Three_Fingers: { on: false, action: "prev" },
+    // Only these two by default. Others can be added with "+ Add gesture".
+    Victory: { on: true, action: "next" },
+    Three_Fingers: { on: true, action: "prev" },
+    ILoveYou: { on: true, action: "close" }, // 🤟 love sign = close the extension
   },
 };
-// Every gesture MediaPipe can recognize (see CLAUDE.md).
+
+// Every gesture the user can pick, with its display name.
+// The keys must match the names the engine reports (see engine/gestures.js).
 const LABELS = {
   Thumb_Up: "👍 Thumb up",
   Thumb_Down: "👎 Thumb down",
@@ -25,109 +34,189 @@ const LABELS = {
   Pointing_Up: "☝️ One finger",
   Victory: "✌️ Two fingers",
   Three_Fingers: "🖖 Three fingers",
+  ILoveYou: "🤟 Love sign",
 };
-const ACTIONS = { next: "Next slide", prev: "Previous slide", none: "Nothing" };
 
-let pip = null; // the always-on-top window, when open
-// Look elements up in whichever window currently shows the panel.
-const $ = (id) => (pip ? pip.document : document).getElementById(id);
-let settings = structuredClone(DEFAULT_SETTINGS);
-let running = false;
+let settings = structuredClone(DEFAULT_SETTINGS); // the current settings (structuredClone = a fresh copy)
+let running = false;  // is the camera engine on?
+let toastTimer = null; // timer that hides the "➡️ Next slide!" message
 
-// ---------- settings ----------
+// Shortcut: $("startBtn") = the element with id="startBtn" in panel.html.
+const $ = (id) => document.getElementById(id);
+
+// =============================================================================
+// 1. SETTINGS
+// =============================================================================
+
+// Read the saved settings from Chrome - if not, use defaults 
 async function loadSettings() {
   const { settings: saved } = await chrome.storage.local.get("settings");
-  // Use the saved gesture list as-is, so removed gestures stay removed.
-  if (saved) settings = { ...DEFAULT_SETTINGS, ...saved, gestures: saved.gestures || structuredClone(DEFAULT_SETTINGS.gestures) };
-  // Drop gestures that are no longer offered (e.g. ILoveYou saved before it was removed).
-  for (const name of Object.keys(settings.gestures)) if (!(name in LABELS)) delete settings.gestures[name];
+  if (saved && saved.version === DEFAULT_SETTINGS.version) {
+    settings = saved;
+  }
 }
+
 function saveSettings() {
   chrome.storage.local.set({ settings });
 }
 
-// ---------- UI ----------
-function renderGestures() {
+// Build the gesture list = [checkbox] [name] [action menu] [✕].
+function showGestureList() {
   const list = $("gestureList");
-  list.innerHTML = "";
-  for (const [name, g] of Object.entries(settings.gestures)) {
+  list.innerHTML = ""; // empty the list, then rebuild it from the settings
+
+  for (const name in settings.gestures) {
+    const g = settings.gestures[name]; // e.g. { on: true, action: "next" }
+
+    // 1. Create the row from a small piece of HTML.
     const row = document.createElement("div");
     row.className = "gesture";
     row.innerHTML = `
-      <input type="checkbox" ${g.on ? "checked" : ""}>
-      <span class="name">${LABELS[name] || name}</span>
-      <select>${Object.entries(ACTIONS)
-        .map(([v, t]) => `<option value="${v}" ${v === g.action ? "selected" : ""}>${t}</option>`)
-        .join("")}</select>
+      <input type="checkbox">
+      <span class="name"></span>
+      <select>
+        <option value="next">Next slide</option>
+        <option value="prev">Previous slide</option>
+        <option value="close">Close extension</option>
+        <option value="none">Nothing</option>
+      </select>
       <button class="remove" title="Remove this gesture">✕</button>`;
-    row.querySelector("input").onchange = (e) => { g.on = e.target.checked; saveSettings(); };
-    row.querySelector("select").onchange = (e) => { g.action = e.target.value; saveSettings(); };
+
+    // 2. Fill it with this gesture's values.
+    row.querySelector("input").checked = g.on;
+    row.querySelector(".name").textContent = LABELS[name];
+    row.querySelector("select").value = g.action;
+
+    // 3. When the user changes something in this row it updates the settings and save.
+    row.querySelector("input").onchange = (e) => {
+      g.on = e.target.checked;
+      saveSettings();
+    };
+    row.querySelector("select").onchange = (e) => {
+      g.action = e.target.value;
+      saveSettings();
+    };
     row.querySelector(".remove").onclick = () => {
       delete settings.gestures[name];
       saveSettings();
-      renderGestures();
+      showGestureList();
     };
+
     list.appendChild(row);
   }
-  if (!Object.keys(settings.gestures).length) {
+
+  if (list.children.length === 0) {
     list.innerHTML = `<p class="empty">No gestures yet — add one below.</p>`;
   }
-  renderAddGesture();
+  showAddMenu();
 }
 
-// "Add gesture" row: only lists gestures not already in use.
-function renderAddGesture() {
-  const unused = Object.keys(LABELS).filter((n) => !(n in settings.gestures));
-  $("addGesture").hidden = unused.length === 0;
-  $("addSelect").innerHTML = unused.map((n) => `<option value="${n}">${LABELS[n]}</option>`).join("");
+// The "+ Add gesture" menu (only lists gestures that aren't in the list yet)
+function showAddMenu() {
+  const menu = $("addSelect");
+  menu.innerHTML = "";
+  for (const name in LABELS) {
+    if (!(name in settings.gestures)) {
+      menu.add(new Option(LABELS[name], name)); // new Option(text shown, value)
+    }
+  }
+  $("addGesture").hidden = menu.options.length === 0; // hide it when every gesture is used
 }
+
 $("addBtn").onclick = () => {
   const name = $("addSelect").value;
   if (!name) return;
   settings.gestures[name] = { on: true, action: "none" };
   saveSettings();
-  renderGestures();
+  showGestureList();
 };
 
-function renderSliders() {
-  $("tracking").checked = !!settings.showTracking;
+// Put the saved values into the checkbox and sliders, and show them as text.
+function showSettingsValues() {
+  $("tracking").checked = settings.showTracking;
   $("hold").value = settings.holdFrames;
   $("cool").value = settings.cooldownMs;
   $("holdVal").textContent = `${settings.holdFrames} frames`;
-  $("coolVal").textContent = `${(settings.cooldownMs / 1000).toFixed(1)} s`;
+  $("coolVal").textContent = `${settings.cooldownMs / 1000} s`;
 }
-$("tracking").onchange = (e) => { settings.showTracking = e.target.checked; saveSettings(); };
-$("hold").oninput = (e) => { settings.holdFrames = +e.target.value; renderSliders(); saveSettings(); };
-$("cool").oninput = (e) => { settings.cooldownMs = +e.target.value; renderSliders(); saveSettings(); };
 
+// The engine reads this same "settings" object every frame, so changes apply instantly.
+$("tracking").onchange = (e) => {
+  settings.showTracking = e.target.checked;
+  saveSettings();
+};
+$("hold").oninput = (e) => {
+  settings.holdFrames = Number(e.target.value);
+  showSettingsValues();
+  saveSettings();
+};
+$("cool").oninput = (e) => {
+  settings.cooldownMs = Number(e.target.value);
+  showSettingsValues();
+  saveSettings();
+};
+
+// =============================================================================
+// Small visual feedback
+// =============================================================================
+
+// Show a short message over the camera ("➡️ Next slide!"), hidden after 0.9 s.
+// (panel.css makes .toast invisible, and visible when it also has the "show" class.)
 function toast(text) {
-  const t = $("toast");
-  t.textContent = text;
-  t.classList.add("show");
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove("show"), 900);
+  $("toast").textContent = text;
+  $("toast").classList.add("show");
+  clearTimeout(toastTimer); // if a message was already showing, restart its timer
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), 900);
 }
 
+// "🟢 Listening" / "⚪ Paused" in the header.
 function setStatus(on) {
-  const s = $("status");
-  s.textContent = on ? "🟢 Listening" : "⚪ Paused";
-  s.className = `status ${on ? "on" : "off"}`;
+  $("status").textContent = on ? "🟢 Listening" : "⚪ Paused";
+  $("status").className = on ? "status on" : "status off";
 }
 
-// ---------- send an action to Figma ----------
+// =============================================================================
+// 3. ACTIONS: "next" / "prev" go to the bridge, "close" closes this panel
+// =============================================================================
+
+// "next" / "prev": sends { type: "action", action: "next" } to bridge/background.js,
+// which passes it to the Figma tab. The bridge answers { ok: true } or { ok: false, error: "..." }.
+// "close": handled here, no message needed.
 async function sendAction(action) {
   if (action === "none") return;
-  const res = await chrome.runtime.sendMessage({ type: "action", action });
-  if (res?.ok) toast(action === "next" ? "➡️ Next slide!" : "⬅️ Previous slide!");
-  else toast(`⚠️ ${res?.error || "No response"}`);
+
+  // "close" is for the panel itself: turn the camera off, then close this window.
+  if (action === "close") {
+    stopEngine();
+    try {
+      const thisWindow = await chrome.windows.getCurrent(); // the window we are in
+      await chrome.windows.remove(thisWindow.id);           // close it
+    } catch {
+      window.close(); // backup way, in case the line above fails
+    }
+    return;
+  }
+
+  const answer = await chrome.runtime.sendMessage({ type: "action", action });
+  if (answer?.ok) {
+    toast(action === "next" ? "➡️ Next slide!" : "⬅️ Previous slide!");
+  } else {
+    toast(`⚠️ ${answer?.error || "No response"}`);
+  }
 }
 
-document.querySelectorAll("[data-test]").forEach((b) => (b.onclick = () => sendAction(b.dataset.test)));
+// Test buttons: try the Figma connection without using the camera.
+$("testPrev").onclick = () => sendAction("prev");
+$("testNext").onclick = () => sendAction("next");
 
-// ---------- engine ----------
+// =============================================================================
+// 2. ENGINE: start / stop the camera
+// =============================================================================
+
+// Called by the engine each time a gesture is accepted (e.g. name = "Victory").
 function onGesture(name) {
   const g = settings.gestures[name];
-  if (g?.on) sendAction(g.action);
+  if (g && g.on) sendAction(g.action); // only if this gesture is in the list AND ticked
 }
 
 $("startBtn").onclick = async () => {
@@ -148,91 +237,9 @@ $("startBtn").onclick = async () => {
   setStatus(running);
 };
 
-// ---------- always on top (Document Picture-in-Picture) ----------
-// Moves the whole panel into a small window that stays above every other app
-// (Figma fullscreen included). Closing that window puts the panel back here.
-const nativeRAF = window.requestAnimationFrame.bind(window);
-const nativeCAF = window.cancelAnimationFrame.bind(window);
-const pending = new Map();
-let rafSeq = 0;
-
-// While floating, this window may be hidden behind others and Chrome pauses its
-// animation frames, which would freeze the engine loop. So frames are driven by
-// the floating window instead, with a timer as backup for when it closes.
-window.requestAnimationFrame = (cb) => {
-  if (!pip) return nativeRAF(cb);
-  const id = ++rafSeq;
-  const win = pip;
-  let done = false;
-  const run = (t) => {
-    if (done) return;
-    done = true;
-    pending.delete(id);
-    clearTimeout(timer);
-    cb(t ?? performance.now());
-  };
-  const rid = win.requestAnimationFrame(run);
-  const timer = setTimeout(run, 250);
-  pending.set(id, () => {
-    done = true;
-    clearTimeout(timer);
-    try { win.cancelAnimationFrame(rid); } catch {}
-  });
-  return -id; // negative = one of ours
-};
-window.cancelAnimationFrame = (id) => {
-  if (id < 0) { pending.get(-id)?.(); pending.delete(-id); }
-  else nativeCAF(id);
-};
-
-function setSettingsOpen(open) {
-  $("settings").hidden = !open;
-  $("settingsBtn").textContent = open ? "⚙ Settings ▴" : "⚙ Settings ▾";
-}
-$("settingsBtn").onclick = () => setSettingsOpen($("settings").hidden);
-
-async function openOnTop() {
-  if (!("documentPictureInPicture" in window)) {
-    toast("⚠️ Needs Chrome 116 or newer");
-    return;
-  }
-  const win = await documentPictureInPicture.requestWindow({ width: 320, height: 420 });
-  // Copy our stylesheet into the new window.
-  for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
-    const l = win.document.createElement("link");
-    l.rel = "stylesheet";
-    l.href = link.href;
-    win.document.head.appendChild(l);
-  }
-  win.document.title = "Gesture Presenter";
-  win.document.documentElement.classList.add("pip");
-  // Move the panel (elements keep their event handlers).
-  const nodes = [...document.body.children].filter((n) => n.tagName !== "SCRIPT");
-  win.document.body.append(...nodes);
-  pip = win;
-  $("video").play().catch(() => {});
-
-  const note = document.createElement("p");
-  note.id = "pipNote";
-  note.className = "pip-note";
-  note.textContent = "📌 The panel is floating on top of your screen. Close it to bring it back here. Keep this window open (it can stay behind Figma).";
-  document.body.prepend(note);
-
-  $("pipBtn").textContent = "↩ Put back in window";
-  setSettingsOpen(false);
-
-  win.addEventListener("pagehide", () => {
-    document.getElementById("pipNote")?.remove();
-    document.body.prepend(...nodes);
-    pip = null;
-    $("video").play().catch(() => {});
-    $("pipBtn").textContent = "📌 Keep on top";
-    setSettingsOpen(true);
-  });
-}
-$("pipBtn").onclick = () => (pip ? pip.close() : openOnTop().catch((e) => toast(`⚠️ ${e.message}`)));
-
-// ---------- init ----------
+// =============================================================================
+// Start-up: load the saved settings and fill the panel
+// =============================================================================
 await loadSettings();
-renderGestures();
-renderSliders();
+showGestureList();
+showSettingsValues();
