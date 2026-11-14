@@ -3,6 +3,7 @@
 import { startEngine, stopEngine } from "../engine/gestures.js";
 
 const DEFAULT_SETTINGS = {
+  version: 2, // bump to reset users' saved gesture list to the defaults
   enabled: true,
   holdFrames: 8,
   cooldownMs: 1000,
@@ -36,6 +37,12 @@ async function loadSettings() {
   const { settings: saved } = await chrome.storage.local.get("settings");
   // Use the saved gesture list as-is, so removed gestures stay removed.
   if (saved) settings = { ...DEFAULT_SETTINGS, ...saved, gestures: saved.gestures || structuredClone(DEFAULT_SETTINGS.gestures) };
+  // Old saved gesture list (before the version bump): reset it to the new defaults.
+  if (settings.version !== DEFAULT_SETTINGS.version) {
+    settings.gestures = structuredClone(DEFAULT_SETTINGS.gestures);
+    settings.version = DEFAULT_SETTINGS.version;
+    saveSettings();
+  }
   // Drop gestures that are no longer offered (e.g. ILoveYou saved before it was removed).
   for (const name of Object.keys(settings.gestures)) if (!(name in LABELS)) delete settings.gestures[name];
 }
