@@ -1,12 +1,99 @@
 // Gesture engine: camera + MediaPipe Gesture Recognizer + hold/cooldown logic.
 // Owner: gesture engine person. Contract: see CLAUDE.md.
-//
-// Write the code step by step here (see the walkthrough).
+import { GestureRecognizer, FilesetResolver, DrawingUtils } from "../lib/mediapipe/vision_bundle.mjs";
+
+let recognizer = null;
+let stream = null;
+let rafId = 0;
+let running = false;
 
 export async function startEngine({ video, canvas, settings, onGesture }) {
-  // TODO
+  if (running) return;
+
+  // 1. Camera (Chrome shows the permission prompt here).
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: "user" },
+      audio: false,
+    });
+  } catch (e) {
+    stream = null;
+    if (e.name === "NotAllowedError") throw new Error("Camera access denied. Allow it in Chrome site settings.");
+    if (e.name === "NotFoundError") throw new Error("No camera found.");
+    throw e;
+  }
+  video.srcObject = stream;
+  await video.play();
+
+  // 2. MediaPipe (bundled locally, no CDN).
+  try {
+    if (!recognizer) {
+      const fileset = await FilesetResolver.forVisionTasks(chrome.runtime.getURL("lib/mediapipe/wasm"));
+      recognizer = await GestureRecognizer.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: chrome.runtime.getURL("lib/mediapipe/gesture_recognizer.task") },
+        runningMode: "VIDEO",
+        numHands: 1,
+      });
+    }
+  } catch (e) {
+    stopEngine();
+    throw e;
+  }
+
+  // 3. Detection loop with hold + cooldown.
+  running = true;
+  const ctx = canvas.getContext("2d");
+  const drawer = new DrawingUtils(ctx);
+  let lastName = null;
+  let heldFrames = 0;
+  let lastFire = 0;
+  let lastVideoTime = -1;
+
+  const loop = () => {
+    if (!running) return;
+    rafId = requestAnimationFrame(loop);
+    if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
+    lastVideoTime = video.currentTime;
+
+    if (canvas.width !== video.videoWidth) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const result = recognizer.recognizeForVideo(video, performance.now());
+    // Optional hand tracking overlay (settings.showTracking).
+    if (settings.showTracking) {
+      for (const lm of result.landmarks ?? []) {
+        drawer.drawConnectors(lm, GestureRecognizer.HAND_CONNECTIONS, { color: "#00e5ff", lineWidth: 3 });
+        drawer.drawLandmarks(lm, { color: "#ff4081", radius: 3 });
+      }
+    }
+    const name = result.gestures?.[0]?.[0]?.categoryName ?? null;
+
+    if (name && name === lastName) heldFrames++;
+    else { lastName = name; heldFrames = 1; }
+
+    const now = performance.now();
+    if (
+      name && name !== "None" &&
+      settings.enabled !== false &&
+      heldFrames >= settings.holdFrames &&
+      now - lastFire >= settings.cooldownMs
+    ) {
+      lastFire = now;
+      heldFrames = 0;
+      onGesture(name);
+    }
+  };
+  loop();
 }
 
 export function stopEngine() {
-  // TODO
+  running = false;
+  cancelAnimationFrame(rafId);
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
 }

@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   enabled: true,
   holdFrames: 8,
   cooldownMs: 1000,
+  showTracking: false,
   gestures: {
     Thumb_Up: { on: true, action: "next" },
     Thumb_Down: { on: true, action: "prev" },
@@ -48,11 +49,13 @@ function renderGestures() {
 }
 
 function renderSliders() {
+  $("tracking").checked = !!settings.showTracking;
   $("hold").value = settings.holdFrames;
   $("cool").value = settings.cooldownMs;
   $("holdVal").textContent = `${settings.holdFrames} frames`;
   $("coolVal").textContent = `${(settings.cooldownMs / 1000).toFixed(1)} s`;
 }
+$("tracking").onchange = (e) => { settings.showTracking = e.target.checked; saveSettings(); };
 $("hold").oninput = (e) => { settings.holdFrames = +e.target.value; renderSliders(); saveSettings(); };
 $("cool").oninput = (e) => { settings.cooldownMs = +e.target.value; renderSliders(); saveSettings(); };
 
