@@ -8,12 +8,9 @@ const DEFAULT_SETTINGS = {
   cooldownMs: 1000,
   showTracking: false,
   gestures: {
-    Thumb_Up: { on: true, action: "next" },
-    Thumb_Down: { on: true, action: "prev" },
-    Open_Palm: { on: false, action: "none" },
-    Pointing_Up: { on: false, action: "next" },
-    Victory: { on: false, action: "next" },
-    Three_Fingers: { on: false, action: "prev" },
+    // Default list: only these two. Others (👍 👎 ✋ ✊ ☝️) are added with "+ Add gesture".
+    Victory: { on: true, action: "next" },
+    Three_Fingers: { on: true, action: "prev" },
   },
 };
 // Every gesture MediaPipe can recognize (see CLAUDE.md).
