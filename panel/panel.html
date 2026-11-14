@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+  panel/panel.html: the control panel's layout.
+  Opened in its own window by bridge/background.js when you click the extension icon.
+  The behaviour is in panel.js, the look is in panel.css.
+  Elements with an id="..." are used by panel.js through $("id").
+-->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -6,11 +12,14 @@
   <link rel="stylesheet" href="panel.css">
 </head>
 <body>
+  <!-- Title + "🟢 Listening / ⚪ Paused" status -->
   <header>
     <h1>Gesture Presenter</h1>
     <span id="status" class="status off">⚪ Paused</span>
   </header>
 
+  <!-- Camera: the video, a transparent canvas on top for the hand skeleton,
+       and the "toast" bubble that shows "➡️ Next slide!" -->
   <div class="camera">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
@@ -20,47 +29,52 @@
   <button id="startBtn" class="big">▶ Start camera</button>
   <button id="pipBtn" class="pip-btn" title="Float the panel above every window, even Figma fullscreen">📌 Keep on top</button>
 
+  <!-- Only visible in the floating window (see panel.css), to show/hide the settings -->
   <button id="settingsBtn" class="link">⚙ Settings ▾</button>
 
   <div id="settings">
-  <section>
-    <h2>Gestures</h2>
-    <div id="gestureList"></div>
-    <div id="addGesture" class="add-gesture">
-      <select id="addSelect" aria-label="Gesture to add"></select>
-      <button id="addBtn">+ Add gesture</button>
-    </div>
-  </section>
+    <!-- Gesture list: rows are created by renderGestures() in panel.js -->
+    <section>
+      <h2>Gestures</h2>
+      <div id="gestureList"></div>
+      <div id="addGesture" class="add-gesture">
+        <select id="addSelect" aria-label="Gesture to add"></select>
+        <button id="addBtn">+ Add gesture</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Display</h2>
-    <label><input id="tracking" type="checkbox"> Show hand tracking</label>
-  </section>
+    <section>
+      <h2>Display</h2>
+      <label><input id="tracking" type="checkbox"> Show hand tracking</label>
+    </section>
 
-  <section>
-    <h2>Sensitivity
-      <span class="info" tabindex="0" aria-label="About sensitivity">i
-        <span class="tip" role="tooltip">
-          <b>Hold time:</b> how long you must hold a gesture before it triggers. Higher = fewer accidental slide changes, but slower to react.<br><br>
-          <b>Cooldown:</b> the pause after each action before a new gesture is accepted. Higher = no double-skips, but you wait longer between slides.
+    <!-- Sliders for the engine's anti-accident rules, with an "i" tooltip -->
+    <section>
+      <h2>Sensitivity
+        <span class="info" tabindex="0" aria-label="About sensitivity">i
+          <span class="tip" role="tooltip">
+            <b>Hold time:</b> how long you must hold a gesture before it triggers. Higher = fewer accidental slide changes, but slower to react.<br><br>
+            <b>Cooldown:</b> the pause after each action before a new gesture is accepted. Higher = no double-skips, but you wait longer between slides.
+          </span>
         </span>
-      </span>
-    </h2>
-    <label>Hold time <span id="holdVal"></span>
-      <input id="hold" type="range" min="2" max="30">
-    </label>
-    <label>Cooldown <span id="coolVal"></span>
-      <input id="cool" type="range" min="200" max="3000" step="100">
-    </label>
-  </section>
+      </h2>
+      <label>Hold time <span id="holdVal"></span>
+        <input id="hold" type="range" min="2" max="30">
+      </label>
+      <label>Cooldown <span id="coolVal"></span>
+        <input id="cool" type="range" min="200" max="3000" step="100">
+      </label>
+    </section>
 
-  <section>
-    <h2>Test the Figma bridge</h2>
-    <button data-test="prev">◀ Test prev</button>
-    <button data-test="next">Test next ▶</button>
-  </section>
+    <!-- Buttons to test the Figma connection without the camera -->
+    <section>
+      <h2>Test the Figma bridge</h2>
+      <button data-test="prev">◀ Test prev</button>
+      <button data-test="next">Test next ▶</button>
+    </section>
   </div>
 
+  <!-- type="module" lets panel.js use "import" to load the engine -->
   <script type="module" src="panel.js"></script>
 </body>
 </html>

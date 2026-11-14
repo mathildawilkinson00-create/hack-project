@@ -1,21 +1,6 @@
 # Gesture Presenter — HackDécouverte 2026
 
-Chrome extension (Manifest V3) that lets you move through a Figma presentation with hand gestures, using MediaPipe's Gesture Recognizer. Team of 4, one folder per person.
-
-## Architecture
-
-```
-[panel window]  camera + MediaPipe + UI
-   panel/panel.js  ──uses──>  engine/gestures.js   (gesture name, held + cooldown)
-        │  chrome.runtime.sendMessage({ type: "action", action: "next" })
-        ▼
-[service worker] bridge/background.js  ── finds the Figma tab ──>
-        ▼  chrome.tabs.sendMessage({ type: "action", action: "next" })
-[content script] bridge/content.js  → presses ArrowRight / ArrowLeft in Figma
-```
-
-Clicking the extension icon opens `panel/panel.html` in its own small window
-(NOT a popup: popups close when they lose focus and kill the camera).
+Chrome extension (Manifest V3) that lets you move through a Figma presentation with hand gestures, using MediaPipe's Gesture Recognizer. Team of 4, beginners: keep code simple and commented. Architecture diagram and file roles: see README.md.
 
 ## Contracts (do not change without telling the team)
 
@@ -23,41 +8,46 @@ Clicking the extension icon opens `panel/panel.html` in its own small window
 ```js
 startEngine({ video, canvas, settings, onGesture })  // returns Promise<void>
 stopEngine()
-// onGesture(gestureName) fires once per accepted gesture (after hold + cooldown).
-// gestureName is a MediaPipe category name: "Thumb_Up", "Thumb_Down",
-// "Open_Palm", "Closed_Fist", "Pointing_Up", "Victory", "ILoveYou"
+// onGesture(gestureName) fires once per accepted gesture (hold + release + cooldown rules).
+// gestureName: MediaPipe names "Thumb_Up", "Thumb_Down", "Open_Palm", "Closed_Fist",
+// plus our own finger counting: "Pointing_Up" (1 finger), "Victory" (2), "Three_Fingers" (3).
 ```
 
-**Settings** (saved in `chrome.storage.local` under key `settings`)
+**Settings** (saved in `chrome.storage.local` under key `settings`; defaults in `panel/panel.js`)
 ```js
 {
-  enabled: true,
+  version: 2,           // bump to reset everyone's saved gesture list to the defaults
   holdFrames: 8,        // frames a gesture must be held
   cooldownMs: 1000,     // pause after each action
+  showTracking: false,  // draw the hand skeleton
   gestures: {
-    Thumb_Up:   { on: true,  action: "next" },
-    Thumb_Down: { on: true,  action: "prev" },
-    Open_Palm:  { on: false, action: "none" }
+    Victory:       { on: true, action: "next" },
+    Three_Fingers: { on: true, action: "prev" }
   }
 }
 ```
+The engine reads this same object every frame, so slider changes apply live.
 
-**Actions**: `"next" | "prev" | "none"` (add more here if needed, e.g. `"first"`).
+**Actions**: `"next" | "prev" | "none"`.
 
-**Messages**: `{ type: "action", action: "<action>" }` from panel → background → content script.
+**Messages**: `{ type: "action", action: "<action>" }` panel → `bridge/background.js` → `bridge/content.js`.
 Background replies `{ ok: true }` or `{ ok: false, error: "..." }`.
 
 ## Rules
 
+- Comment the code for beginners: explain *why*, in plain English. Every file starts with a header block saying what it does.
 - MediaPipe is bundled in `lib/mediapipe/` (`@mediapipe/tasks-vision@0.10.14` + `gesture_recognizer.task`).
-  **Never load scripts from a CDN** — Manifest V3 forbids remote code.
-- Load the wasm with `FilesetResolver.forVisionTasks(chrome.runtime.getURL("lib/mediapipe/wasm"))`.
-- Stay in your own folder: `engine/`, `bridge/`, `panel/`. Ask before editing another person's folder.
+  **Never load scripts from a CDN** — Manifest V3 forbids remote code. Never edit `lib/`.
 - Plain HTML/CSS/JS, ES modules, no build step, no npm.
+- Stay in your own folder: `engine/`, `bridge/`, `panel/`. Ask before editing another person's folder.
 - No API keys anywhere in the extension.
-- Keep the camera window visible on screen (Chrome throttles hidden windows).
-- If Figma ignores synthetic key events, the fallback is `chrome.debugger` + `Input.dispatchKeyEvent`
-  in `bridge/background.js` (set `USE_DEBUGGER = true`).
+- The engine reads frames with `MediaStreamTrackProcessor` so detection keeps running when the panel is minimized or floating (Document Picture-in-Picture).
+- MediaPipe's own console notes (`W1114 ...`, `INFO: ...`) are filtered out in `engine/gestures.js`.
+- If Figma ignores synthetic key events, set `USE_DEBUGGER = true` in `bridge/background.js`.
+
+## Git workflow
+
+Base branch is `test-merge`. Make a branch from it, commit, push, open a Pull Request **into `test-merge`** (check the "base" dropdown: GitHub defaults to `main`).
 
 ## Testing
 
