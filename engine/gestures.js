@@ -72,7 +72,12 @@ export async function startEngine({ video, canvas, settings, onGesture }) {
         drawer.drawLandmarks(lm, { color: "#ff4081", radius: 3 });
       }
     }
-    const name = result.gestures?.[0]?.[0]?.categoryName ?? null;
+    let name = result.gestures?.[0]?.[0]?.categoryName ?? null;
+    // MediaPipe's Pointing_Up / Victory only work with fingers pointing up.
+    // Replace them with our own orientation-independent detection.
+    if (name === "Pointing_Up" || name === "Victory") name = null;
+    const fingers = result.landmarks?.[0] ? fingerGesture(result.landmarks[0], canvas.width, canvas.height) : null;
+    if (fingers) name = fingers;
 
     if (name && name === lastName) heldFrames++;
     else { lastName = name; heldFrames = 1; }
@@ -101,6 +106,21 @@ export async function startEngine({ video, canvas, settings, onGesture }) {
     }
   };
   loop();
+}
+
+// Orientation-independent finger detection. A finger is "extended" when its tip
+// is farther from the wrist than its middle joint, whatever the hand direction.
+// Returns "Pointing_Up" (index only) or "Victory" (index + middle only), else null.
+// (Names reused from MediaPipe so settings/labels stay the same.)
+function fingerGesture(lm, w, h) {
+  const d = (a, b) => Math.hypot((a.x - b.x) * w, (a.y - b.y) * h);
+  const wrist = lm[0];
+  const extended = ([tip, pip]) => d(lm[tip], wrist) > d(lm[pip], wrist) * 1.15;
+  const [index, middle, ring, pinky] = [[8, 6], [12, 10], [16, 14], [20, 18]].map(extended);
+  if (ring || pinky) return null;
+  if (index && !middle) return "Pointing_Up";
+  if (index && middle) return "Victory";
+  return null;
 }
 
 export function stopEngine() {

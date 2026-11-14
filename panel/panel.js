@@ -11,9 +11,17 @@ const DEFAULT_SETTINGS = {
     Thumb_Up: { on: true, action: "next" },
     Thumb_Down: { on: true, action: "prev" },
     Open_Palm: { on: false, action: "none" },
+    Pointing_Up: { on: false, action: "next" },
+    Victory: { on: false, action: "prev" },
   },
 };
-const LABELS = { Thumb_Up: "👍 Thumb up", Thumb_Down: "👎 Thumb down", Open_Palm: "✋ Open palm" };
+const LABELS = {
+  Thumb_Up: "👍 Thumb up",
+  Thumb_Down: "👎 Thumb down",
+  Open_Palm: "✋ Open palm",
+  Pointing_Up: "☝️ One finger",
+  Victory: "✌️ Two fingers",
+};
 const ACTIONS = { next: "Next slide", prev: "Previous slide", none: "Nothing" };
 
 const $ = (id) => document.getElementById(id);
