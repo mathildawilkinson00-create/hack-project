@@ -166,6 +166,9 @@ function findGesture(result, hand, width, height) {
   if (name === "None" || name === "Pointing_Up" || name === "Victory") name = null;
 
   if (hand) {
+    // First check the 🤟 love sign. If it is one, we are done: no need to count fingers.
+    if (isLoveSign(hand, width, height)) return "ILoveYou";
+
     const fingers = countFingers(hand, width, height);
     if (fingers === 1) name = "Pointing_Up";   // 1 finger
     if (fingers === 2) name = "Victory";       // 2 fingers
@@ -175,7 +178,19 @@ function findGesture(result, hand, width, height) {
 }
 
 // =============================================================================
-//  COUNT THE FINGERS (works in every direction)
+//  SMALL HELPER: distance between two points
+// =============================================================================
+// MediaPipe gives every point as numbers between 0 and 1 (a share of the image
+// width / height), so we multiply by the image size to get pixels. Then
+// Math.hypot(dx, dy) = the straight-line distance (Pythagoras).
+function distance(a, b, width, height) {
+  const dx = (a.x - b.x) * width;
+  const dy = (a.y - b.y) * height;
+  return Math.hypot(dx, dy);
+}
+
+// =============================================================================
+//  WHICH FINGERS ARE UP? (works in every direction)
 // =============================================================================
 // Idea: a finger is UP if its tip is FARTHER from the wrist than its middle
 // joint. When the finger is bent, the tip comes back toward the palm, so it's
@@ -187,27 +202,32 @@ function findGesture(result, hand, width, height) {
 //   middle : tip 12, joint 10
 //   ring   : tip 16, joint 14
 //   pinky  : tip 20, joint 18
-function countFingers(hand, width, height) {
-  // Distance between two points, in pixels (points are 0–1, so multiply by the image size)
-  function distance(a, b) {
-    const dx = (a.x - b.x) * width;
-    const dy = (a.y - b.y) * height;
-    return Math.hypot(dx, dy);
-  }
-
+//
+// Returns something like { index: true, middle: true, ring: false, pinky: false }.
+function fingersUp(hand, width, height) {
   const wrist = hand[0];
 
   // Returns true if the finger is up
   function isUp(tipNumber, jointNumber) {
-    const tipDistance = distance(hand[tipNumber], wrist);
-    const jointDistance = distance(hand[jointNumber], wrist);
+    const tipDistance = distance(hand[tipNumber], wrist, width, height);
+    const jointDistance = distance(hand[jointNumber], wrist, width, height);
     return tipDistance > jointDistance * 1.15; // 1.15 = tip must be 15% farther (half-bent fingers don't count)
   }
 
-  const index = isUp(8, 6);
-  const middle = isUp(12, 10);
-  const ring = isUp(16, 14);
-  const pinky = isUp(20, 18);
+  return {
+    index: isUp(8, 6),
+    middle: isUp(12, 10),
+    ring: isUp(16, 14),
+    pinky: isUp(20, 18),
+  };
+}
+
+// =============================================================================
+//  COUNT THE FINGERS
+// =============================================================================
+// Returns 1, 2 or 3 (index, index+middle, index+middle+ring), or 0 if it's none of those.
+function countFingers(hand, width, height) {
+  const { index, middle, ring, pinky } = fingersUp(hand, width, height);
 
   // Rules: the index must be up and the pinky folded
   if (pinky || !index) return 0;
@@ -215,6 +235,26 @@ function countFingers(hand, width, height) {
   if (middle) return 2;         // index + middle
   if (!ring) return 1;          // index only
   return 0;                     // odd combo (index + ring): ignore
+}
+
+// =============================================================================
+//  LOVE SIGN 🤟 (works in every direction)
+// =============================================================================
+// "I love you" in sign language = thumb + index + pinky up, middle + ring folded.
+// MediaPipe also knows it ("ILoveYou") but mostly with the hand upright, so we
+// check it ourselves with the same distance idea as the fingers.
+function isLoveSign(hand, width, height) {
+  const palmLength = distance(hand[0], hand[9], width, height); // wrist → base of the middle finger
+
+  // Thumb out? Its tip must be far from the base of the pinky (point 17).
+  // A thumb folded over the palm stays close to it.
+  const thumbOut = distance(hand[4], hand[17], width, height) > palmLength * 0.9; // 0.9 = tune here if needed
+
+  const fingers = fingersUp(hand, width, height);
+  const indexAndPinkyUp = fingers.index && fingers.pinky;
+  const middleAndRingFolded = !fingers.middle && !fingers.ring;
+
+  return thumbOut && indexAndPinkyUp && middleAndRingFolded;
 }
 
 // =============================================================================

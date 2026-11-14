@@ -12,7 +12,7 @@ import { startEngine, stopEngine } from "../engine/gestures.js";
 
 // ---- Default settings (used the first time you open the panel) --------------
 const DEFAULT_SETTINGS = {
-  version: 2,          // change this number to reset everyone's saved settings to these defaults
+  version: 5,          // change this number to reset everyone's saved settings to these defaults
   holdFrames: 8,       // frames a gesture must be held before it fires (~30 frames = 1 second)
   cooldownMs: 1000,    // minimum pause between two actions, in milliseconds
   showTracking: false, // draw the hand skeleton over the camera?
@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
     // Only these two by default. Others can be added with "+ Add gesture".
     Victory: { on: true, action: "next" },
     Three_Fingers: { on: true, action: "prev" },
+    ILoveYou: { on: true, action: "close" }, // 🤟 love sign = close the extension
   },
 };
 
@@ -33,6 +34,7 @@ const LABELS = {
   Pointing_Up: "☝️ One finger",
   Victory: "✌️ Two fingers",
   Three_Fingers: "🖖 Three fingers",
+  ILoveYou: "🤟 Love sign",
 };
 
 let settings = structuredClone(DEFAULT_SETTINGS); // the current settings (structuredClone = a fresh copy)
@@ -75,6 +77,7 @@ function showGestureList() {
       <select>
         <option value="next">Next slide</option>
         <option value="prev">Previous slide</option>
+        <option value="close">Close extension</option>
         <option value="none">Nothing</option>
       </select>
       <button class="remove" title="Remove this gesture">✕</button>`;
@@ -173,13 +176,27 @@ function setStatus(on) {
 }
 
 // =============================================================================
-// 3. ACTIONS: send "next" / "prev" to the bridge
+// 3. ACTIONS: "next" / "prev" go to the bridge, "close" closes this panel
 // =============================================================================
 
-// Sends { type: "action", action: "next" } to bridge/background.js, which passes
-// it to the Figma tab. The bridge answers { ok: true } or { ok: false, error: "..." }.
+// "next" / "prev": sends { type: "action", action: "next" } to bridge/background.js,
+// which passes it to the Figma tab. The bridge answers { ok: true } or { ok: false, error: "..." }.
+// "close": handled here, no message needed.
 async function sendAction(action) {
   if (action === "none") return;
+
+  // "close" is for the panel itself: turn the camera off, then close this window.
+  if (action === "close") {
+    stopEngine();
+    try {
+      const thisWindow = await chrome.windows.getCurrent(); // the window we are in
+      await chrome.windows.remove(thisWindow.id);           // close it
+    } catch {
+      window.close(); // backup way, in case the line above fails
+    }
+    return;
+  }
+
   const answer = await chrome.runtime.sendMessage({ type: "action", action });
   if (answer?.ok) {
     toast(action === "next" ? "➡️ Next slide!" : "⬅️ Previous slide!");
