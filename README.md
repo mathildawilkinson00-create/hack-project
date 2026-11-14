@@ -1,4 +1,4 @@
-# Gesture Presenter ✋
+# Point Right ✋
 
 Control your Figma presentation with hand gestures. A Chrome extension built at HackDécouverte 2026 with MediaPipe. Everything runs on your device: the video never leaves your laptop.
 

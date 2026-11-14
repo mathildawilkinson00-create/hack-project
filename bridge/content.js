@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type !== "action") return;
   const k = KEYS[msg.action];
   if (k) {
-    console.log("[Gesture Presenter] action:", msg.action); // visible in Figma's console (F12)
+    console.log("[Point Right] action:", msg.action); // visible in Figma's console (F12)
     press(k);
   }
 });

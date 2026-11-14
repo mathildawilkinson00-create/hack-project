@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Gesture Presenter",
+  "name": "Point Right",
   "version": "0.1.0",
   "description": "Control your Figma presentation with hand gestures (MediaPipe, runs 100% on your device).",
-  "action": { "default_title": "Open Gesture Presenter" },
+  "action": { "default_title": "Open Point Right" },
   "background": { "service_worker": "bridge/background.js" },
   "permissions": ["storage", "tabs", "debugger"],
   "host_permissions": ["https://www.figma.com/*"],

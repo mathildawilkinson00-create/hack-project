@@ -1,4 +1,4 @@
-# Gesture Presenter — HackDécouverte 2026
+# Point Right — HackDécouverte 2026
 
 Chrome extension (Manifest V3) that lets you move through a Figma presentation with hand gestures, using MediaPipe's Gesture Recognizer. Team of 4, beginners: keep code simple and commented. Architecture diagram and file roles: see README.md.
 
