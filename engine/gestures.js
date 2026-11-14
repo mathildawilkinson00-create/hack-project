@@ -14,7 +14,6 @@
 //        checkGesture()  → held long enough? let go since last time? cooldown over?
 //   4. If yes → onGesture("Victory") tells the panel
 //
-// Thanks to Philippe for the structure (findGesture / countFingers / checkGesture).
 // =============================================================================
 
 import { GestureRecognizer, FilesetResolver, DrawingUtils } from "../lib/mediapipe/vision_bundle.mjs";
