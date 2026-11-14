@@ -48,6 +48,9 @@ export async function startEngine({ video, canvas, settings, onGesture }) {
   let heldFrames = 0;
   let lastFire = 0;
   let lastVideoTime = -1;
+  let firedName = null; // gesture that just fired, waiting for release
+  let releaseFrames = 0;
+  const RELEASE_FRAMES = 4; // tolerance for 1-2 frame detection flickers
 
   const loop = () => {
     if (!running) return;
@@ -74,6 +77,15 @@ export async function startEngine({ video, canvas, settings, onGesture }) {
     if (name && name === lastName) heldFrames++;
     else { lastName = name; heldFrames = 1; }
 
+    // After a gesture fires, it must be released (hand closed / other gesture /
+    // hand gone) for RELEASE_FRAMES frames before it can fire again.
+    if (firedName) {
+      if (name !== firedName) releaseFrames++;
+      else releaseFrames = 0;
+      if (releaseFrames >= RELEASE_FRAMES) { firedName = null; releaseFrames = 0; heldFrames = name ? 1 : 0; }
+      return;
+    }
+
     const now = performance.now();
     if (
       name && name !== "None" &&
@@ -83,6 +95,8 @@ export async function startEngine({ video, canvas, settings, onGesture }) {
     ) {
       lastFire = now;
       heldFrames = 0;
+      firedName = name;
+      releaseFrames = 0;
       onGesture(name);
     }
   };
