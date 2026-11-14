@@ -20,9 +20,9 @@ const LABELS = {
   Thumb_Up: "👍 Thumb up",
   Thumb_Down: "👎 Thumb down",
   Open_Palm: "✋ Open palm",
+  Closed_Fist: "✊ Closed fist",
   Pointing_Up: "☝️ One finger",
   Victory: "✌️ Two fingers",
-  Closed_Fist: "✊ Closed fist",
 };
 const ACTIONS = { next: "Next slide", prev: "Previous slide", none: "Nothing" };
 
