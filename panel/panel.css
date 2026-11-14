@@ -57,20 +57,21 @@ h2 { display: flex; align-items: center; gap: 6px; }
 }
 .info:hover .tip, .info:focus .tip { opacity: 1; visibility: visible; }
 
-/* Settings toggle: only used in the Figma overlay */
+/* "Keep on top" button + settings toggle (toggle only shown in the floating window) */
+.pip-btn { width: 100%; margin-top: 8px; }
 #settingsBtn { display: none; }
 button.link { background: none; border: none; color: var(--muted); padding: 8px 0 0; width: 100%; font-size: 12px; }
 button.link:hover { color: var(--text); }
+.pip-note { color: var(--muted); font-size: 13px; line-height: 1.5; }
 
-/* Overlay mode: see-through panel floating over Figma */
-:root.overlay { color-scheme: normal; --card: rgba(28, 31, 39, 0.55); }
-:root.overlay, :root.overlay body { background: transparent; }
-:root.overlay body { padding: 10px; font-size: 13px; }
-:root.overlay header { display: none; }          /* overlay.js has its own title bar */
-:root.overlay .camera { width: 100%; margin-top: 0; }
-:root.overlay button.big { padding: 8px; margin-top: 8px; }
-:root.overlay #settingsBtn { display: block; }
-:root.overlay .info .tip { width: 200px; left: -60px; top: calc(100% + 8px); bottom: auto; }
+/* Floating always-on-top window: compact layout */
+:root.pip body { padding: 10px; font-size: 13px; }
+:root.pip header { display: none; }
+:root.pip .camera { margin-top: 0; }
+:root.pip button.big { padding: 8px; margin-top: 8px; }
+:root.pip .pip-btn { padding: 6px; font-size: 12px; }
+:root.pip #settingsBtn { display: block; }
+:root.pip .info .tip { width: 200px; left: -60px; top: calc(100% + 8px); bottom: auto; }
 
 /* Add / remove gestures */
 .gesture .remove { padding: 2px 8px; background: none; border: none; color: var(--muted); }
