@@ -19,13 +19,27 @@
 
   <button id="startBtn" class="big">▶ Start camera</button>
 
+  <button id="settingsBtn" class="link">⚙ Settings ▾</button>
+
+  <div id="settings">
   <section>
     <h2>Gestures</h2>
     <div id="gestureList"></div>
+    <div id="addGesture" class="add-gesture">
+      <select id="addSelect" aria-label="Gesture to add"></select>
+      <button id="addBtn">+ Add gesture</button>
+    </div>
   </section>
 
   <section>
-    <h2>Sensitivity</h2>
+    <h2>Sensitivity
+      <span class="info" tabindex="0" aria-label="About sensitivity">i
+        <span class="tip" role="tooltip">
+          <b>Hold time:</b> how long you must hold a gesture before it triggers. Higher = fewer accidental slide changes, but slower to react.<br><br>
+          <b>Cooldown:</b> the pause after each action before a new gesture is accepted. Higher = no double-skips, but you wait longer between slides.
+        </span>
+      </span>
+    </h2>
     <label>Hold time <span id="holdVal"></span>
       <input id="hold" type="range" min="2" max="30">
     </label>
@@ -39,6 +53,7 @@
     <button data-test="prev">◀ Test prev</button>
     <button data-test="next">Test next ▶</button>
   </section>
+  </div>
 
   <script type="module" src="panel.js"></script>
 </body>

@@ -37,3 +37,45 @@ button.big { width: 100%; margin-top: 12px; padding: 12px; background: var(--acc
 .gesture .name { flex: 1; }
 label { display: block; margin-bottom: 8px; font-size: 14px; }
 input[type=range] { width: 100%; }
+
+/* Info "i" with hover tooltip */
+h2 { display: flex; align-items: center; gap: 6px; }
+.info {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid var(--muted); color: var(--muted);
+  font: italic 600 11px/1 Georgia, serif; text-transform: none; cursor: help;
+}
+.info:hover, .info:focus { color: var(--text); border-color: var(--text); outline: none; }
+.info .tip {
+  position: absolute; left: -80px; bottom: calc(100% + 8px);
+  width: 240px; padding: 10px 12px; border-radius: 8px;
+  background: var(--card); border: 1px solid #333; color: var(--text);
+  font: 400 12px/1.4 system-ui, sans-serif; text-transform: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  opacity: 0; visibility: hidden; transition: opacity .15s; z-index: 10;
+}
+.info:hover .tip, .info:focus .tip { opacity: 1; visibility: visible; }
+
+/* Settings toggle: only used in the Figma overlay */
+#settingsBtn { display: none; }
+button.link { background: none; border: none; color: var(--muted); padding: 8px 0 0; width: 100%; font-size: 12px; }
+button.link:hover { color: var(--text); }
+
+/* Overlay mode: see-through panel floating over Figma */
+:root.overlay { color-scheme: normal; --card: rgba(28, 31, 39, 0.55); }
+:root.overlay, :root.overlay body { background: transparent; }
+:root.overlay body { padding: 10px; font-size: 13px; }
+:root.overlay header { display: none; }          /* overlay.js has its own title bar */
+:root.overlay .camera { width: 100%; margin-top: 0; }
+:root.overlay button.big { padding: 8px; margin-top: 8px; }
+:root.overlay #settingsBtn { display: block; }
+:root.overlay .info .tip { width: 200px; left: -60px; top: calc(100% + 8px); bottom: auto; }
+
+/* Add / remove gestures */
+.gesture .remove { padding: 2px 8px; background: none; border: none; color: var(--muted); }
+.gesture .remove:hover { color: #ff6b6b; }
+.add-gesture { display: flex; gap: 6px; margin-top: 4px; }
+.add-gesture select { flex: 1; min-width: 0; }
+.add-gesture button { white-space: nowrap; }
+.empty { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }

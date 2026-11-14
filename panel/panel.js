@@ -12,7 +12,16 @@ const DEFAULT_SETTINGS = {
     Open_Palm: { on: false, action: "none" },
   },
 };
-const LABELS = { Thumb_Up: "👍 Thumb up", Thumb_Down: "👎 Thumb down", Open_Palm: "✋ Open palm" };
+// Every gesture MediaPipe can recognize (see CLAUDE.md).
+const LABELS = {
+  Thumb_Up: "👍 Thumb up",
+  Thumb_Down: "👎 Thumb down",
+  Open_Palm: "✋ Open palm",
+  Closed_Fist: "✊ Closed fist",
+  Pointing_Up: "☝️ Pointing up",
+  Victory: "✌️ Victory",
+  ILoveYou: "🤟 I love you",
+};
 const ACTIONS = { next: "Next slide", prev: "Previous slide", none: "Nothing" };
 
 const $ = (id) => document.getElementById(id);
@@ -22,7 +31,8 @@ let running = false;
 // ---------- settings ----------
 async function loadSettings() {
   const { settings: saved } = await chrome.storage.local.get("settings");
-  if (saved) settings = { ...DEFAULT_SETTINGS, ...saved, gestures: { ...DEFAULT_SETTINGS.gestures, ...saved.gestures } };
+  // Use the saved gesture list as-is, so removed gestures stay removed.
+  if (saved) settings = { ...DEFAULT_SETTINGS, ...saved, gestures: saved.gestures || structuredClone(DEFAULT_SETTINGS.gestures) };
 }
 function saveSettings() {
   chrome.storage.local.set({ settings });
@@ -40,12 +50,36 @@ function renderGestures() {
       <span class="name">${LABELS[name] || name}</span>
       <select>${Object.entries(ACTIONS)
         .map(([v, t]) => `<option value="${v}" ${v === g.action ? "selected" : ""}>${t}</option>`)
-        .join("")}</select>`;
+        .join("")}</select>
+      <button class="remove" title="Remove this gesture">✕</button>`;
     row.querySelector("input").onchange = (e) => { g.on = e.target.checked; saveSettings(); };
     row.querySelector("select").onchange = (e) => { g.action = e.target.value; saveSettings(); };
+    row.querySelector(".remove").onclick = () => {
+      delete settings.gestures[name];
+      saveSettings();
+      renderGestures();
+    };
     list.appendChild(row);
   }
+  if (!Object.keys(settings.gestures).length) {
+    list.innerHTML = `<p class="empty">No gestures yet — add one below.</p>`;
+  }
+  renderAddGesture();
 }
+
+// "Add gesture" row: only lists gestures not already in use.
+function renderAddGesture() {
+  const unused = Object.keys(LABELS).filter((n) => !(n in settings.gestures));
+  $("addGesture").hidden = unused.length === 0;
+  $("addSelect").innerHTML = unused.map((n) => `<option value="${n}">${LABELS[n]}</option>`).join("");
+}
+$("addBtn").onclick = () => {
+  const name = $("addSelect").value;
+  if (!name) return;
+  settings.gestures[name] = { on: true, action: "none" };
+  saveSettings();
+  renderGestures();
+};
 
 function renderSliders() {
   $("hold").value = settings.holdFrames;
@@ -103,6 +137,20 @@ $("startBtn").onclick = async () => {
   $("startBtn").textContent = running ? "⏸ Stop camera" : "▶ Start camera";
   setStatus(running);
 };
+
+// ---------- overlay mode (panel shown inside Figma by overlay.js) ----------
+if (new URLSearchParams(location.search).has("overlay")) {
+  document.documentElement.classList.add("overlay");
+  $("settings").hidden = true;
+  $("settingsBtn").onclick = () => {
+    $("settings").hidden = !$("settings").hidden;
+    $("settingsBtn").textContent = $("settings").hidden ? "⚙ Settings ▾" : "⚙ Settings ▴";
+  };
+  // Tell the overlay how tall we are so it can resize the frame.
+  new ResizeObserver(() => {
+    window.parent.postMessage({ type: "gp-height", height: document.body.scrollHeight }, "*");
+  }).observe(document.body);
+}
 
 // ---------- init ----------
 await loadSettings();

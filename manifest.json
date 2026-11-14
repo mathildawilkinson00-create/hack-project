@@ -10,7 +10,13 @@
   "content_scripts": [
     {
       "matches": ["https://www.figma.com/*"],
-      "js": ["bridge/content.js"]
+      "js": ["bridge/content.js", "panel/overlay.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel/*", "engine/*", "lib/*"],
+      "matches": ["https://www.figma.com/*"]
     }
   ],
   "content_security_policy": {
