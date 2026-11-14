@@ -1,16 +1,11 @@
 // =============================================================================
 // panel/panel.js — THE CONTROL PANEL'S BRAIN
 // =============================================================================
-// panel.html = WHAT is on the page, panel.css = how it LOOKS,
-// panel.js (this file) = what HAPPENS when you click things.
-//
 // This file has 3 jobs:
 //   1. SETTINGS  show the gesture list + sliders, save them in Chrome
 //   2. ENGINE    start / stop the camera engine (engine/gestures.js)
 //   3. ACTIONS   when the engine reports "gesture X", look up what X is
 //                mapped to (next / prev slide) and send it to the bridge
-//
-//   engine ──"Victory"──> panel ──{ action: "next" }──> bridge/background.js ──> Figma
 // =============================================================================
 
 import { startEngine, stopEngine } from "../engine/gestures.js";
@@ -51,8 +46,7 @@ const $ = (id) => document.getElementById(id);
 // 1. SETTINGS
 // =============================================================================
 
-// Read the saved settings from Chrome (chrome.storage.local survives closing the window).
-// We only use them if they come from the current version; otherwise we keep the defaults.
+// Read the saved settings from Chrome - if not, use defaults 
 async function loadSettings() {
   const { settings: saved } = await chrome.storage.local.get("settings");
   if (saved && saved.version === DEFAULT_SETTINGS.version) {
@@ -64,7 +58,7 @@ function saveSettings() {
   chrome.storage.local.set({ settings });
 }
 
-// Build the gesture list: one row per gesture = [checkbox] [name] [action menu] [✕].
+// Build the gesture list = [checkbox] [name] [action menu] [✕].
 function showGestureList() {
   const list = $("gestureList");
   list.innerHTML = ""; // empty the list, then rebuild it from the settings
@@ -90,7 +84,7 @@ function showGestureList() {
     row.querySelector(".name").textContent = LABELS[name];
     row.querySelector("select").value = g.action;
 
-    // 3. When the user changes something in this row → update the settings and save.
+    // 3. When the user changes something in this row it updates the settings and save.
     row.querySelector("input").onchange = (e) => {
       g.on = e.target.checked;
       saveSettings();
@@ -114,7 +108,7 @@ function showGestureList() {
   showAddMenu();
 }
 
-// The "+ Add gesture" menu: only lists gestures that aren't in the list yet.
+// The "+ Add gesture" menu (only lists gestures that aren't in the list yet)
 function showAddMenu() {
   const menu = $("addSelect");
   menu.innerHTML = "";
