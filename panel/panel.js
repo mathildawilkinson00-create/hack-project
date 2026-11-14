@@ -12,7 +12,8 @@ const DEFAULT_SETTINGS = {
     Thumb_Down: { on: true, action: "prev" },
     Open_Palm: { on: false, action: "none" },
     Pointing_Up: { on: false, action: "next" },
-    Victory: { on: false, action: "prev" },
+    Victory: { on: false, action: "next" },
+    Three_Fingers: { on: false, action: "prev" },
   },
 };
 // Every gesture MediaPipe can recognize (see CLAUDE.md).
@@ -23,6 +24,7 @@ const LABELS = {
   Closed_Fist: "✊ Closed fist",
   Pointing_Up: "☝️ One finger",
   Victory: "✌️ Two fingers",
+  Three_Fingers: "🖖 Three fingers",
 };
 const ACTIONS = { next: "Next slide", prev: "Previous slide", none: "Nothing" };
 
