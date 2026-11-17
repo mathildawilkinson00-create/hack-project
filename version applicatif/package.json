@@ -1,0 +1,13 @@
+{
+  "name": "point-right-app",
+  "version": "0.1.0",
+  "description": "Point Right: control any presentation with hand gestures (desktop app).",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^45.3.3"
+  }
+}
